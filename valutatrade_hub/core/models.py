@@ -1,5 +1,5 @@
 import hashlib #Разрешена по условию задачи
-
+from utils import get_rate 
 
 class User:
     # В рамках данного проекта оформление кода может
@@ -72,4 +72,86 @@ class User:
             return False
         return self.hashed_password == self._hash_password(password)
 
- 
+class Wallet:
+    def __init__(
+        self, 
+        currency_code,
+        balance = 0.0 #если юзер не введ баланс
+        ):
+        self.balance = balance
+        self.currency_code = currency_code #не уверен
+
+    @property
+    def balance(self):
+        return self._balance
+    @balance.setter
+    def balance(self, amount):
+        if not isinstance(amount, (int, float)) or amount < 0:
+            raise ValueError("Баланс должен быть неотрицательным числом")
+        self._balance = amount
+    def deposit(self, amount: float):
+        if not isinstance(amount, (int, float)) or amount < 0:
+            raise ValueError("Сумма депозита должна быть неотрицательным числом")
+        self.balance += amount
+    def withdraw(self, amount:float):
+        if not isinstance(amount, (int, float)) or amount < 0:
+            raise ValueError("Сумма снятия должна быть неотрицательным числом")
+        if amount > self.balance:
+            raise ValueError("Недостаточно средств")
+        self.balance -= amount
+    def get_balance_info(self):
+        return {
+            "currency_code": self.currency_code,
+            "balance": self.balance,
+        }
+class Portfolio:
+    def __init__(
+        self,
+        user,
+        wallets=None
+        ):
+        self._user_id = user.user_id
+        self._user = user
+        self._wallets = {} if wallets is None else wallets.copy()
+
+    @property
+    def user(self):
+        return self._user
+    
+    @property
+    def wallets(self):
+        return self._wallets.copy()
+
+    def add_currency(self, currency_code):
+        if not isinstance(currency_code, str) or not currency_code.strip():
+            raise ValueError("Код валюты должен быть непустой строкой")
+        code = currency_code.strip().upper()
+
+        if code in self._wallets:
+            raise ValueError(f"Кошелёк '{code}' уже существует")
+
+        self._wallets[code] = Wallet(code)
+
+    def get_wallet(self, currency_code):
+        if not isinstance(currency_code, str) or not currency_code.strip():
+            raise ValueError("Код валюты должен быть непустой строкой")
+        code = currency_code.strip().upper()
+
+        if code not in self._wallets:
+            raise ValueError(f"У вас нет кошелька '{code}'")
+
+        return self._wallets[code]
+
+    def get_total_value(self, base_currency="USD"):
+        if not isinstance(base_currency, str) or not base_currency.strip():
+            raise ValueError("Код валюты должен быть непустой строкой")
+        base = base_currency.strip().upper()
+        total = 0.0
+        for code, wallet in self._wallets.items():
+            rate_info = get_rate(code, base)
+            rate = rate_info["rate"]
+            value = wallet.balance * rate
+            # Суммируем стоимости
+            total += value
+        # Возвращаем общую стоимость
+        return total
