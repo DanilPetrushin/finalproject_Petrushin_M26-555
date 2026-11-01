@@ -1,5 +1,8 @@
-DATA_DIR = "data"
-# Тестовая переменная
+from pathlib import Path
+
+
+DATA_DIR = Path("data")
+# ЗАГЛУШКА
 EXCHANGE_RATES = {
     "USD": 1.0,
     "EUR": 1.08,

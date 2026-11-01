@@ -1,11 +1,16 @@
 import json
-from constants import DATA_DIR, EXCHANGE_RATES
+from valutatrade_hub.core.constants import DATA_DIR, EXCHANGE_RATES
 
 
-def load_json(filename):
+def load_json(filename, default=None):
     """
     Загружает переданные данные из JSON.
     """
+    # Проблема: иногда нам нужен не [], а {}
+    # Фикс:
+    if default is None:
+        default = []
+    
     path = DATA_DIR / filename
 
     try:
@@ -13,7 +18,7 @@ def load_json(filename):
             return json.load(file)
 
     except FileNotFoundError:
-        return [] 
+        return default.copy()
 
 def save_json(filename, data):
     """
