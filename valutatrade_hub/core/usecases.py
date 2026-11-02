@@ -3,7 +3,7 @@
 # встроенным и используется для подобных задач
 import secrets  
 from datetime import datetime, timezone
-
+from valutatrade_hub.core.exceptions import InsufficientFundsError
 from valutatrade_hub.core.models import Portfolio, User, Wallet
 from valutatrade_hub.core.utils import (
     get_rate,
@@ -131,13 +131,9 @@ class TradingService:
     # какие валюты вообще допустимы?
     # мб проверять через константу?
     def show_portfolio(self, base_currency="USD"):
+        from valutatrade_hub.core.currencies import get_currency
         portfolio = self._load_portfolio()
-    
-        base = normalize_currency(base_currency)
-
-        if base not in SUPPORTED_CURRENCIES:
-            raise ValueError(f"Неизвестная базовая валюта '{base}'")
-    
+        base = get_currency(base_currency).code
         rows = []
     
         for code, wallet in portfolio.wallets.items():
@@ -165,20 +161,16 @@ class TradingService:
         if code == "USD":
             raise ValueError("USD — расчётная валюта. Выберите другую валюту")
         # Получаем курс
-        try:
-            rate_info = get_rate(code, "USD")
-        except ValueError as error:
-            raise ValueError(
-                f"Не удалось получить курс для {code}→USD"
-            ) from error
+        rate_info = get_rate(code, "USD")
 
         rate = rate_info["rate"]
         cost = validate_amount(amount * rate)
 
-        # Допустим, что юзер может изначально не иметь кошелька, тогда ошибка
         if "USD" not in portfolio.wallets:
-            raise ValueError(
-                "Недостаточно средств: у вас нет USD-кошелька"
+            raise InsufficientFundsError(
+                available=0.0,
+                required=cost,
+                code="USD",
             )
 
         usd_wallet = portfolio.get_wallet("USD")
@@ -218,16 +210,13 @@ class TradingService:
         wallet = portfolio.get_wallet(code)
 
         if amount > wallet.balance:
-            raise ValueError(
-                f"Недостаточно средств: доступно {wallet.balance:.4f} {code}, требуется {amount:.4f} {code}"
+            raise InsufficientFundsError(
+                available=wallet.balance,
+                required=amount,
+                code=code,
             )
 
-        try:
-            rate_info = get_rate(code, "USD")
-        except ValueError as error:
-            raise ValueError(
-                f"Не удалось получить курс для {code}→USD"
-            ) from error
+        rate_info = get_rate(code, "USD")
 
         rate = rate_info["rate"]
         cost = validate_amount(amount * rate)

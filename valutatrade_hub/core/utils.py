@@ -2,6 +2,7 @@ import json
 from datetime import datetime, timezone
 from valutatrade_hub.core.constants import DATA_DIR, TIME_LIMIT
 
+
 def load_json(filename, default=None):
     """
     Загружает переданные данные из JSON.
@@ -32,11 +33,12 @@ def save_json(filename, data):
     with path.open("w", encoding="utf-8") as f:
         json.dump(data, f, indent=4, ensure_ascii=False)
 
-### ПОКА РАБОТАЕТ С КОНСТАНТОЙ - ПОТОМ ПОМЕНЯТЬ!!!
 def get_rate(from_currency, to_currency):
+    # Да, необычный формат импорта, но иначе происходит ошибка.
+    from valutatrade_hub.core.currencies import get_currency
     # Проверяем вадиность
-    source = normalize_currency(from_currency)
-    target = normalize_currency(to_currency)
+    source = get_currency(from_currency).code
+    target = get_currency(to_currency).code
 
     # Создаём ключ по примеру
     key = f"{source}_{target}"

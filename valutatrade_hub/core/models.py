@@ -1,5 +1,7 @@
 import hashlib # Разрешена по условию задачи
 from valutatrade_hub.core.utils import get_rate
+from valutatrade_hub.core.exceptions import InsufficientFundsError
+
 
 class User:
     # В рамках данного проекта оформление кода может
@@ -97,7 +99,11 @@ class Wallet:
         if not isinstance(amount, (int, float)) or amount < 0:
             raise ValueError("Сумма снятия должна быть неотрицательным числом")
         if amount > self.balance:
-            raise ValueError("Недостаточно средств")
+            raise InsufficientFundsError(
+                available=self.balance,
+                required=amount,
+                code=self.currency_code,
+            )
         self.balance -= amount
     def get_balance_info(self):
         return {

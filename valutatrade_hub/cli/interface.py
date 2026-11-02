@@ -1,5 +1,11 @@
 from valutatrade_hub.core.usecases import TradingService
 import shlex
+from valutatrade_hub.core.constants import CURRENCIES
+from valutatrade_hub.core.exceptions import (
+    ApiRequestError,
+    CurrencyNotFoundError,
+    InsufficientFundsError,
+)
 
 
 # Потом можно в utils убрать
@@ -181,6 +187,18 @@ def main():
                 )
             else:
                 print(f"Команды '{command}' нет. Введите help.")
+
+        # Перехват ошибок от частного к общему
+        except InsufficientFundsError as error:
+            print(error)
+
+        except CurrencyNotFoundError as error:
+            print(error)
+            print("Поддерживаемые валюты: " + ", ".join(CURRENCIES))
+
+        except ApiRequestError as error:
+            print(error)
+            print("Повторите попытку позже. Если ошибка сохраняется, проверьте подключение к сети.")
 
         except (ValueError, OSError) as error:
             print(f"Ошибка: {error}")
