@@ -7,7 +7,7 @@ class User:
     def __init__(self,
         user_id,
         username,
-        password,
+        hashed_password,
         salt,
         registration_date):
         self._user_id = user_id
@@ -18,7 +18,7 @@ class User:
         # вызываем метод, который проверят пароль
         # хэширует его 
         # и уже потом фиксирует его в памяти
-        self.change_password(password)
+        self._hashed_password = hashed_password
         self._registration_date = registration_date
     
     @property

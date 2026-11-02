@@ -5,8 +5,13 @@ import secrets
 from datetime import datetime, timezone
 
 from valutatrade_hub.core.models import Portfolio, User, Wallet
-from valutatrade_hub.core.utils import load_json, save_json, get_rate
-
+from valutatrade_hub.core.utils import (
+    get_rate,
+    load_json,
+    normalize_currency,
+    save_json,
+    validate_amount,
+)
 
 class TradingService:
     def __init__(self):
@@ -32,10 +37,10 @@ class TradingService:
         #Собираем экземпляр класса
         user = User (user_id = user_id,
                     username = username,
-                    password = password, 
+                    hashed_password="", 
                     salt = secrets.token_hex(8), 
                     registration_date = datetime.now(timezone.utc))
-
+        user.change_password(password)
         # get_user_info возвращает user_id, username и registration_date  
         # остальное добавляем вручную через методы
         user_data = user.get_user_info()
@@ -88,50 +93,53 @@ class TradingService:
                 return user.get_user_info()
 
         raise ValueError(f"Пользователь '{username}' не найден")
-    
+    def _save_portfolio(self, portfolio):
+        portfolios = load_json("portfolios.json")
+        wallets_data = {}
+        for code, wallet in portfolio.wallets.items():
+            wallets_data[code] = {
+                "balance": wallet.balance,
+            }
+        for item in portfolios:
+            if item["user_id"] == portfolio.user.user_id:
+                item["wallets"] = wallets_data
+                save_json("portfolios.json", portfolios)
+                return
+        raise ValueError("Портфель пользователя не найден")
     def _load_portfolio(self):
+        # вот ради этого мы сделали класс
         if self.current_user is None:
             raise ValueError("Сначала выполните login")
-
+    
         portfolios = load_json("portfolios.json")
-
+    
         for item in portfolios:
             if item["user_id"] == self.current_user.user_id:
+                # 
                 wallets = {}
-
                 for code, wallet_data in item["wallets"].items():
                     wallets[code] = Wallet(
                         currency_code=code,
                         balance=wallet_data["balance"],
-                    )
-
+                    )    
                 return Portfolio(
                     user=self.current_user,
                     wallets=wallets,
                 )
-
         raise ValueError("Портфель пользователя не найден")
+    # разделил для простоты восприятия
+    # какие валюты вообще допустимы?
+    # мб проверять через константу?
     def show_portfolio(self, base_currency="USD"):
         portfolio = self._load_portfolio()
+    
+        base = normalize_currency(base_currency)
 
-        if (
-            not isinstance(base_currency, str)
-            or not base_currency.strip()
-        ):
-            raise ValueError("Код валюты должен быть непустой строкой")
-
-        base = base_currency.strip().upper()
-
-        # get_rate уже умеет проверять, известна ли валюта.
-        try:
-            get_rate(base, base)
-        except ValueError as error:
-            raise ValueError(
-                f"Неизвестная базовая валюта '{base}'"
-            ) from error
-
+        if base not in SUPPORTED_CURRENCIES:
+            raise ValueError(f"Неизвестная базовая валюта '{base}'")
+    
         rows = []
-
+    
         for code, wallet in portfolio.wallets.items():
             rate_info = get_rate(code, base)
             value = wallet.balance * rate_info["rate"]
@@ -141,10 +149,115 @@ class TradingService:
                 "balance": wallet.balance,
                 "value": value,
             })
-
+    
         return {
             "username": portfolio.user.username,
             "base": base,
             "wallets": rows,
             "total": portfolio.get_total_value(base),
         }
+    def buy(self, currency_code, amount):
+        portfolio = self._load_portfolio()
+        # Приводим к общему виду входные данные + проверяем их
+        code = normalize_currency(currency_code)
+        amount = validate_amount(amount)
+        # Конечно, можно и без этого, но зачем покупать USD за USD?
+        if code == "USD":
+            raise ValueError("USD — расчётная валюта. Выберите другую валюту")
+        # Получаем курс
+        try:
+            rate_info = get_rate(code, "USD")
+        except ValueError as error:
+            raise ValueError(
+                f"Не удалось получить курс для {code}→USD"
+            ) from error
+
+        rate = rate_info["rate"]
+        cost = validate_amount(amount * rate)
+
+        # Допустим, что юзер может изначально не иметь кошелька, тогда ошибка
+        if "USD" not in portfolio.wallets:
+            raise ValueError(
+                "Недостаточно средств: у вас нет USD-кошелька"
+            )
+
+        usd_wallet = portfolio.get_wallet("USD")
+
+        if code not in portfolio.wallets:
+            portfolio.add_currency(code)
+
+        wallet = portfolio.get_wallet(code)
+        before = wallet.balance
+
+        usd_wallet.withdraw(cost)
+        wallet.deposit(amount)
+
+        self._save_portfolio(portfolio)
+
+        return {
+            "currency_code": code,
+            "amount": amount,
+            "rate": rate,
+            "cost": cost,
+            "before": before,
+            "after": wallet.balance,
+        }
+    def sell(self, currency_code, amount):
+        #Начало из buy()
+        portfolio = self._load_portfolio()
+        code = normalize_currency(currency_code)
+        amount = validate_amount(amount)
+        if code == "USD":
+            raise ValueError("USD — расчётная валюта. Выберите другую валюту")
+
+        if code not in portfolio.wallets:
+            raise ValueError(
+                f"У вас нет кошелька '{code}'. Он создаётся автоматически при первой покупке."
+            )
+
+        wallet = portfolio.get_wallet(code)
+
+        if amount > wallet.balance:
+            raise ValueError(
+                f"Недостаточно средств: доступно {wallet.balance:.4f} {code}, требуется {amount:.4f} {code}"
+            )
+
+        try:
+            rate_info = get_rate(code, "USD")
+        except ValueError as error:
+            raise ValueError(
+                f"Не удалось получить курс для {code}→USD"
+            ) from error
+
+        rate = rate_info["rate"]
+        cost = validate_amount(amount * rate)
+
+        if "USD" not in portfolio.wallets:
+            portfolio.add_currency("USD")
+
+        usd_wallet = portfolio.get_wallet("USD")
+        before = wallet.balance
+
+        wallet.withdraw(amount)
+        usd_wallet.deposit(cost)
+
+        self._save_portfolio(portfolio)
+
+        return {
+            "currency_code": code,
+            "amount": amount,
+            "rate": rate,
+            "cost": cost,
+            "before": before,
+            "after": wallet.balance,
+        }
+    def get_rate(self, from_currency, to_currency):
+        source = normalize_currency(from_currency)
+        target = normalize_currency(to_currency)
+
+        result = get_rate(source, target)
+
+        result["from_currency"] = source
+        result["to_currency"] = target
+
+        return result
