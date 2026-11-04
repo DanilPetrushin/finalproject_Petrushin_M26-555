@@ -82,7 +82,7 @@ def main():
                 print(f"Вы вошли как '{result['username']}'")
             elif command == "show-portfolio":
                 if len(args) == 1:
-                    base = "USD"
+                    base = None
 
                 elif len(args) == 3 and args[1] == "--base":
                     base = args[2]

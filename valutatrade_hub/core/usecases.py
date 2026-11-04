@@ -12,13 +12,18 @@ from valutatrade_hub.core.utils import (
     save_json,
     validate_amount,
 )
+from valutatrade_hub.infra.settings import SettingsLoader
+from valutatrade_hub.decorators import log_action
+from valutatrade_hub.core.currencies import get_currency
+from valutatrade_hub.core.exceptions import InsufficientFundsError
 
 class TradingService:
     def __init__(self):
         self.current_user = None
         # Пока никто не вошёл current_user = None
+        self._settings = SettingsLoader()
     def register(self, username, password):
-        users = load_json("users.json")
+        users = load_json(self._settings.get("USERS_FILE"))
 
         if not isinstance(username, str) or not username.strip():
             raise ValueError("Неверное имя пользователя")
@@ -53,15 +58,15 @@ class TradingService:
 
         # Передаём user, тк в самом классе он достаёт user_id из user
         portfolio = Portfolio(user)
-        portfolios = load_json("portfolios.json")
+        portfolios = load_json(self._settings.get("PORTFOLIOS_FILE"))
         portfolios.append({
             "user_id": portfolio.user.user_id,
             "wallets": portfolio.wallets,
         })
 
         # Сохраняем переменные с данными в JSON
-        save_json("users.json", users)
-        save_json("portfolios.json", portfolios)
+        save_json(self._settings.get("USERS_FILE"), users)
+        save_json(self._settings.get("PORTFOLIOS_FILE"), portfolios)
 
         return user.get_user_info()
     
@@ -71,7 +76,7 @@ class TradingService:
 
         username = username.strip()
 
-        users = load_json("users.json")
+        users = load_json(self._settings.get("USERS_FILE"))
 
         for item in users:
             if item["username"] == username:
@@ -94,7 +99,7 @@ class TradingService:
 
         raise ValueError(f"Пользователь '{username}' не найден")
     def _save_portfolio(self, portfolio):
-        portfolios = load_json("portfolios.json")
+        portfolios = load_json(self._settings.get("PORTFOLIOS_FILE"))
         wallets_data = {}
         for code, wallet in portfolio.wallets.items():
             wallets_data[code] = {
@@ -103,7 +108,7 @@ class TradingService:
         for item in portfolios:
             if item["user_id"] == portfolio.user.user_id:
                 item["wallets"] = wallets_data
-                save_json("portfolios.json", portfolios)
+                save_json(self._settings.get("PORTFOLIOS_FILE"), portfolios)
                 return
         raise ValueError("Портфель пользователя не найден")
     def _load_portfolio(self):
@@ -111,7 +116,7 @@ class TradingService:
         if self.current_user is None:
             raise ValueError("Сначала выполните login")
     
-        portfolios = load_json("portfolios.json")
+        portfolios = load_json(self._settings.get("PORTFOLIOS_FILE"))
     
         for item in portfolios:
             if item["user_id"] == self.current_user.user_id:
@@ -128,11 +133,17 @@ class TradingService:
                 )
         raise ValueError("Портфель пользователя не найден")
     # разделил для простоты восприятия
-    # какие валюты вообще допустимы?
-    # мб проверять через константу?
-    def show_portfolio(self, base_currency="USD"):
+
+    def show_portfolio(self, base_currency=None):
+        # прежде base_currency указывалась как = USD, однако по условию
+        # singleton должен указывать её, поэтому меняем на =None и если
+        # пользователь не указал её, то ищем в settings.py
+        # P.S. вообще здесь = None не обязателен, но лучше добавить, чем не добавлять
         from valutatrade_hub.core.currencies import get_currency
         portfolio = self._load_portfolio()
+        if base_currency is None:
+            base_currency = self._settings.get("DEFAULT_BASE_CURRENCY")
+
         base = get_currency(base_currency).code
         rows = []
     
@@ -152,10 +163,11 @@ class TradingService:
             "wallets": rows,
             "total": portfolio.get_total_value(base),
         }
+    @log_action("BUY", verbose=True)
     def buy(self, currency_code, amount):
         portfolio = self._load_portfolio()
         # Приводим к общему виду входные данные + проверяем их
-        code = normalize_currency(currency_code)
+        code = get_currency(currency_code).code
         amount = validate_amount(amount)
         # Конечно, можно и без этого, но зачем покупать USD за USD?
         if code == "USD":
@@ -167,11 +179,7 @@ class TradingService:
         cost = validate_amount(amount * rate)
 
         if "USD" not in portfolio.wallets:
-            raise InsufficientFundsError(
-                available=0.0,
-                required=cost,
-                code="USD",
-            )
+            raise InsufficientFundsError(available=0.0,required=cost,code="USD")
 
         usd_wallet = portfolio.get_wallet("USD")
 
@@ -194,19 +202,17 @@ class TradingService:
             "before": before,
             "after": wallet.balance,
         }
+    @log_action("SELL", verbose=True)
     def sell(self, currency_code, amount):
         #Начало из buy()
         portfolio = self._load_portfolio()
-        code = normalize_currency(currency_code)
+        code = get_currency(currency_code).code
         amount = validate_amount(amount)
         if code == "USD":
             raise ValueError("USD — расчётная валюта. Выберите другую валюту")
 
         if code not in portfolio.wallets:
-            raise ValueError(
-                f"У вас нет кошелька '{code}'. Он создаётся автоматически при первой покупке."
-            )
-
+            raise InsufficientFundsError(available=0.0,required=amount,code=code)
         wallet = portfolio.get_wallet(code)
 
         if amount > wallet.balance:

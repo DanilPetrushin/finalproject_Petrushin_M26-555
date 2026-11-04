@@ -1,7 +1,11 @@
 from pathlib import Path
 from currencies import FiatCurrency, CryptoCurrency 
+from valutatrade_hub.infra.settings import PROJECT_ROOT, SettingsLoader
 
-DATA_DIR = Path("data")
+
+settings = SettingsLoader()
+DATA_DIR = PROJECT_ROOT / settings.get("DATA_DIR")
+TIME_LIMIT = settings.get("RATES_TTL_SECONDS")
 # ЗАГЛУШКА
 EXCHANGE_RATES = {
     "USD": 1.0,

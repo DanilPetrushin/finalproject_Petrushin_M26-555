@@ -1,8 +1,16 @@
 import json
 from datetime import datetime, timezone
 from valutatrade_hub.core.constants import DATA_DIR, TIME_LIMIT
+from valutatrade_hub.infra.settings import SettingsLoader
+from valutatrade_hub.core.exceptions import ApiRequestError
 
 
+def parser_get(source, target):
+    """Должна получать свежий числовой курс из Parser Service."""
+    raise ApiRequestError(
+        f"Parser Service пока не подключён; "
+        f"не удалось обновить курс {source}→{target}"
+    )
 def load_json(filename, default=None):
     """
     Загружает переданные данные из JSON.
@@ -34,7 +42,7 @@ def save_json(filename, data):
         json.dump(data, f, indent=4, ensure_ascii=False)
 
 def get_rate(from_currency, to_currency):
-    # Да, необычный формат импорта, но иначе происходит ошибка.
+    # Да, необычный формат импорта, но иначе происходит ошибка
     from valutatrade_hub.core.currencies import get_currency
     # Проверяем вадиность
     source = get_currency(from_currency).code
@@ -44,8 +52,15 @@ def get_rate(from_currency, to_currency):
     key = f"{source}_{target}"
     # Для времени
     now = datetime.now(timezone.utc)
-    # Подгружает и ищем по ключу
-    rates = load_json("rates.json", {})
+        # Подгружает и ищем по ключу
+    settings = SettingsLoader()
+    filename = settings.get("RATES_FILE")
+    if source == target:
+        return {
+            "rate": 1.0,
+            "updated_at": now.isoformat(),
+        }
+    rates = load_json(settings.get("RATES_FILE"), {})
     record = rates.get(key)
 
     # Сначала пробуем использовать сохранённый курс.
@@ -70,9 +85,22 @@ def get_rate(from_currency, to_currency):
 
         except (ValueError, TypeError, KeyError):
             pass
-    raise ValueError(
-    f"Курс {source}→{target} недоступен. Повторите попытку позже."
-    )
+    # Свежего курса нет — пробуем обновить.
+    try:
+        rate = validate_amount(parser_get(source, target))
+    except (OSError, ValueError, TypeError) as error:
+        raise ApiRequestError(str(error)) from error
+
+    record = {
+        "rate": rate,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    rates[key] = record
+    save_json(filename, rates)
+
+    return record.copy()
+    
 
 def normalize_currency(currency_code):
     '''

@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+
 # тут мы получаем именно путь до папки project на каждом пк
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 # а вот тут уже до project/config
