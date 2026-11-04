@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from valutatrade_hub.core.exceptions import CurrencyNotFoundError
 from valutatrade_hub.core.utils import normalize_currency
-from constants import CURRENCIES
+
 
 class Currency(ABC):
     def __init__(self, name, code):
@@ -60,3 +60,33 @@ def get_currency(code: str) -> Currency:
         raise CurrencyNotFoundError(code)
 
     return CURRENCIES[code]
+
+CURRENCIES = {
+    "USD": FiatCurrency(
+        name="US Dollar",
+        code="USD",
+        issuing_country="United States",
+    ),
+    "EUR": FiatCurrency(
+        name="Euro",
+        code="EUR",
+        issuing_country="Eurozone",
+    ),
+    "RUB": FiatCurrency(
+        name="Russian Ruble",
+        code="RUB",
+        issuing_country="Russia",
+    ),
+    "BTC": CryptoCurrency(
+        name="Bitcoin",
+        code="BTC",
+        algorithm="SHA-256",
+        market_cap=1.12e12,
+    ),
+    "ETH": CryptoCurrency(
+        name="Ethereum",
+        code="ETH",
+        algorithm="Proof of Stake",
+        market_cap=3.6e11,
+    ),
+}

@@ -1,12 +1,11 @@
 from valutatrade_hub.core.usecases import TradingService
 import shlex
-from valutatrade_hub.core.constants import CURRENCIES
 from valutatrade_hub.core.exceptions import (
     ApiRequestError,
     CurrencyNotFoundError,
     InsufficientFundsError,
 )
-
+from valutatrade_hub.core.currencies import CURRENCIES
 
 # Потом можно в utils убрать
 def print_help():
@@ -137,29 +136,27 @@ def main():
                 if command == "buy":
                     result = service.buy(currency, amount)
                     operation = "Покупка"
-                    description = "Оценочная стоимость покупки"
-
+                    description = "Списано с USD-кошелька"
                 else:
                     result = service.sell(currency, amount)
                     operation = "Продажа"
-                    description = "Оценочная выручка"
+                    description = "Зачислено на USD-кошелёк"
 
                 code = result["currency_code"]
 
                 print(
                     f"{operation} выполнена: "
-                    f"{result['amount']:.4f} {code} "
-                    f"по курсу {result['rate']:.4f} USD/{code}"
+                    f"{result['amount']:.8f} {code} "
+                    f"по курсу {result['rate']:.8f} USD/{code}"
                 )
 
                 print("Изменения в портфеле:")
-
                 print(
-                    f"- {code}: было {result['before']:.4f} "
-                    f"→ стало {result['after']:.4f}"
+                    f"- {code}: было {result['before']:.8f} "
+                    f"→ стало {result['after']:.8f}"
                 )
 
-                print(f"{description}: {result['cost']:,.4f} USD")
+                print(f"{description}: {result['cost']:,.8f} USD")
             elif command == "get-rate":
                 if (
                     len(args) != 5
@@ -178,12 +175,12 @@ def main():
                 rate = result["rate"]
 
                 print(
-                    f"Курс {source}→{target}: {rate:.4f} "
+                    f"Курс {source}→{target}: {rate:.8f} "
                     f"(обновлено: {result['updated_at']})"
                 )
                 print(
                     f"Обратный курс {target}→{source}: "
-                    f"{1 / rate:.4f}"
+                    f"{1 / rate:.8f}"
                 )
             else:
                 print(f"Команды '{command}' нет. Введите help.")
