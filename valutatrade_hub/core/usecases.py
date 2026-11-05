@@ -31,6 +31,9 @@ class TradingService:
         # Пока никто не вошёл current_user = None
         self._settings = SettingsLoader()
     def register(self, username, password):
+        '''
+        Регистрация пользователя (без входа в аккаунт)
+        '''
         users = load_json(self._settings.get("USERS_FILE"))
 
         if not isinstance(username, str) or not username.strip():
@@ -79,6 +82,9 @@ class TradingService:
         return user.get_user_info()
     
     def login(self, username, password):
+        '''
+        Вход в аккаунт зарегистрированного пользователя 
+        '''
         if not isinstance(username, str) or not username.strip():
             raise ValueError("Неверное имя пользователя")
 
@@ -142,6 +148,10 @@ class TradingService:
     # разделил для простоты восприятия
 
     def show_portfolio(self, base_currency=None):
+        """
+        Возврат баланса кошельков и 
+        общей стоимость портфеля в выбранной валюте.
+        """
         # прежде base_currency указывалась как = USD, однако по условию
         # singleton должен указывать её, поэтому меняем на =None и если
         # пользователь не указал её, то ищем в settings.py
@@ -172,6 +182,10 @@ class TradingService:
         }
     @log_action("BUY", verbose=True)
     def buy(self, currency_code, amount):
+        '''
+        Осуществление указанного количества валюты за USD
+        и возвращение информации о покупке.
+        '''
         portfolio = self._load_portfolio()
         # Приводим к общему виду входные данные + проверяем их
         code = get_currency(currency_code).code
@@ -211,6 +225,10 @@ class TradingService:
         }
     @log_action("SELL", verbose=True)
     def sell(self, currency_code, amount):
+        '''
+        Продажа указанного количества валюты, зачисление USD с продажи
+        и возврат информации о продаже.
+        '''
         #Начало из buy()
         portfolio = self._load_portfolio()
         code = get_currency(currency_code).code
@@ -254,6 +272,10 @@ class TradingService:
             "after": wallet.balance,
         }
     def get_rate(self, from_currency, to_currency):
+        '''
+        Возвращает курс одной валюты к другой и время
+        последнего обновления.
+        '''
         source = normalize_currency(from_currency)
         target = normalize_currency(to_currency)
 
@@ -265,6 +287,9 @@ class TradingService:
         return result
     
     def update_rates(self, source=None):
+        '''
+        Обновляет кэш курсов из выбранного или из всех источников
+        '''
         config = ParserConfig()
 
         # Через словарь связываем название источника и класс
@@ -296,6 +321,10 @@ class TradingService:
 
         return updater.run_update()
     def show_rates(self, currency=None, top=None, base=None):
+        '''
+        Показывает курсы из кэша с учётом параметров (фильтов)
+        и базовой валюты
+        '''
         # Проверяем есть ли N для показа топ-N дорогих криптовалюс
         if top is not None and (
             not isinstance(top, int) or top <= 0

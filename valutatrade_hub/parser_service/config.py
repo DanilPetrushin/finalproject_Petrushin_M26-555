@@ -26,7 +26,9 @@ class ParserConfig:
         data_dir = PROJECT_ROOT / settings.get("DATA_DIR")
 
         self.RATES_FILE_PATH = data_dir / settings.get("RATES_FILE")
-        self.HISTORY_FILE_PATH = data_dir / settings.get("HISTORY_FILE", "exchange_rates.json")
+        self.HISTORY_FILE_PATH = data_dir / settings.get(
+            "HISTORY_FILE", "exchange_rates.json"
+            )
 
         
         # Сетевые параметры

@@ -50,6 +50,9 @@ def save_json(filename, data):
     finally:
         temporary_path.unlink(missing_ok=True)
 def get_rate(from_currency, to_currency):
+    '''
+    Вывод свежего курса одной валюты к другой и времени обновления
+    '''
     # Да, необычный формат импорта, но иначе происходит ошибка
     from valutatrade_hub.core.currencies import get_currency
     # Проверяем вадиность

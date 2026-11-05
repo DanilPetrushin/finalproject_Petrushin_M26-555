@@ -5,6 +5,9 @@ from valutatrade_hub.core.utils import get_rate
 
 
 class User:
+    '''
+    Хранит данные пользователя
+    '''
     # В рамках данного проекта оформление кода может
     # чуть отходить от строгил правил в пользу читаемости
     def __init__(self,
@@ -58,6 +61,9 @@ class User:
         return hashlib.sha256((password + self.salt).encode()).hexdigest()
     
     def change_password(self, new_password: str):
+        '''
+        Смотрим на соответствие условиям + сохраняет хэш с солью.
+        '''
         if not isinstance(new_password, str) or len(new_password) < 4:
             raise ValueError("Пароль должен быть не короче 4 символов")
         self._hashed_password = self._hash_password(new_password)
@@ -71,11 +77,17 @@ class User:
 
     # -> bool означает ожидаемый тип на return
     def verify_password(self, password: str) -> bool:
+        '''
+        Совпадает ли введённый пароль с сохранённым?
+        '''
         if not isinstance(password, str):
             return False
         return self.hashed_password == self._hash_password(password)
 
 class Wallet:
+    '''
+    Управление балансом кошелька.
+    '''
     def __init__(
         self, 
         currency_code,
@@ -93,10 +105,16 @@ class Wallet:
             raise ValueError("Баланс должен быть неотрицательным числом")
         self._balance = amount
     def deposit(self, amount: float):
+        '''
+        Пополнение кошелька на указанную сумму.
+        '''
         if not isinstance(amount, (int, float)) or amount < 0:
             raise ValueError("Сумма депозита должна быть неотрицательным числом")
         self.balance += amount
     def withdraw(self, amount:float):
+        '''
+        Списание с кошелька на указанную сумму.
+        '''
         if not isinstance(amount, (int, float)) or amount < 0:
             raise ValueError("Сумма снятия должна быть неотрицательным числом")
         if amount > self.balance:
@@ -112,6 +130,9 @@ class Wallet:
             "balance": self.balance,
         }
 class Portfolio:
+    '''
+    Хранит кошельки одного юзера.
+    '''
     def __init__(
         self,
         user,
@@ -130,6 +151,9 @@ class Portfolio:
         return self._wallets.copy()
 
     def add_currency(self, currency_code):
+        '''
+        Если кошелька для валюты ещё нет, то создай его.
+        '''
         if not isinstance(currency_code, str) or not currency_code.strip():
             raise ValueError("Код валюты должен быть непустой строкой")
         code = currency_code.strip().upper()
@@ -140,6 +164,9 @@ class Portfolio:
         self._wallets[code] = Wallet(code)
 
     def get_wallet(self, currency_code):
+        '''
+        Возвращает кошелёк по коду валюты
+        '''
         if not isinstance(currency_code, str) or not currency_code.strip():
             raise ValueError("Код валюты должен быть непустой строкой")
         code = currency_code.strip().upper()
@@ -150,6 +177,9 @@ class Portfolio:
         return self._wallets[code]
 
     def get_total_value(self, base_currency="USD"):
+        '''
+        Возвращает общую стооимость кошельков в выбранной валюте.
+        '''
         if not isinstance(base_currency, str) or not base_currency.strip():
             raise ValueError("Код валюты должен быть непустой строкой")
         base = base_currency.strip().upper()
