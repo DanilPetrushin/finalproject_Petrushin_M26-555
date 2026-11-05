@@ -25,7 +25,10 @@ def load_json(filename, default=None):
 
     try:
         with path.open(encoding="utf-8") as file:
-            return json.load(file)
+            text = file.read()
+            if not text.strip():
+                return default.copy()
+            return json.loads(text)
 
     except FileNotFoundError:
         return default.copy()
@@ -68,29 +71,44 @@ def get_rate(from_currency, to_currency):
     rates = load_json(filename, {})
     pairs = rates.get("pairs", {})
     record = pairs.get(key)
+        # Например, для USD → BTC ищем сначала USD_BTC, затем BTC_USD.
+    for pair_key in (key, f"{target}_{source}"):
+        record = pairs.get(pair_key)
+        if record is None:
+            continue
 
-    # Сначала пробуем использовать сохранённый курс.
-    # Есть ли запись?
-    if record is not None:
         try:
-            # если есть - см. значение
             rate = validate_amount(record["rate"])
-            # Из строки в datetime 
             updated = datetime.fromisoformat(record["updated_at"])
 
+            # Старые записи без часового пояса считаем временем в UTC.
             if updated.tzinfo is None:
                 updated = updated.replace(tzinfo=UTC)
-            # Вычисляем сколько времени прошло
-            time_passed = (now - updated).total_seconds()
-
-            if 0 <= time_passed < settings.get("RATES_TTL_SECONDS"):
-                return {
-                    "rate": rate,
-                    "updated_at": record["updated_at"],
-                }
-
         except (ValueError, TypeError, KeyError):
-            pass
+            # Если запись повреждена, проверяем следующую пару.
+            continue
+
+        # Принимаем только свежие записи с датой из прошлого или настоящего.
+        age = (now - updated).total_seconds()
+        if not 0 <= age < settings.get("RATES_TTL_SECONDS"):
+            continue
+
+        # Если нашли обратную пару, переворачиваем курс.
+        if pair_key != key:
+            rate = 1 / rate
+
+        return {"rate": rate, "updated_at": updated.isoformat()}
+    if source != "USD" and target != "USD":
+        source_in_usd = get_rate(source, "USD")
+        target_in_usd = get_rate(target, "USD")
+        updated = min(
+            datetime.fromisoformat(source_in_usd["updated_at"]),
+            datetime.fromisoformat(target_in_usd["updated_at"]),
+        )
+        return {
+            "rate": source_in_usd["rate"] / target_in_usd["rate"],
+            "updated_at": updated.isoformat(),
+        }
     # Свежего курса нет — пробуем обновить.
     try:
         rate = validate_amount(parser_get(source, target))

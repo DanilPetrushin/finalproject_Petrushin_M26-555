@@ -406,3 +406,18 @@ class TradingService:
             "rates": rows,
             "last_refresh": cache.get("last_refresh"),
         }
+    def test_fund(self):
+        '''
+        Данная команда нужна и применяется только для демонстрации
+        функционала программы
+        '''
+        portfolio = self._load_portfolio()
+
+        if "USD" not in portfolio.wallets:
+            portfolio.add_currency("USD")
+
+        wallet = portfolio.get_wallet("USD")
+        wallet.deposit(1000.0)
+        self._save_portfolio(portfolio)
+
+        return wallet.balance

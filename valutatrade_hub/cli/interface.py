@@ -25,6 +25,7 @@ def print_help():
     print("update-rates --source <coingecko|exchangerate> — обновить источник")
     print("show-rates [--currency <код>] [--top <число>] "
         "[--base <код>] — показать курсы из кеша")
+    print("test-fund — начислить 1000 тестовых USD")
     print("help — показать справку")
     print("exit — завершить работу")
     print('\nЗначения с пробелами заключайте в кавычки: "Иван Иванов".')
@@ -258,10 +259,7 @@ def main():
                     except ValueError:
                         raise ValueError(
                             "'top' должен быть положительным целым числом"
-                        ) from None
-                if top <= 0:
-                    raise ValueError("'top' должен быть положительным целым числом")
-                
+                        ) from None        
                 result = service.show_rates(
                     currency=options.get("--currency"),
                     top=top,
@@ -286,6 +284,13 @@ def main():
                     ])
 
                 print(table)
+
+            elif command == "test-fund":
+                if len(args) != 1:
+                    raise ValueError("Использование: test-fund")
+
+                balance = service.test_fund()
+                print(f"Начислено 1000 USD. Баланс: {balance:,.2f} USD.")
             else:
                 print(f"Команды '{command}' нет. Введите help.")
 
@@ -299,8 +304,9 @@ def main():
 
         except ApiRequestError as error:
             print(error)
-            print("Повторите попытку позже. Если ошибка сохраняется, "
-                  "проверьте подключение к сети.")
+            print("Попробуйте воспользоваться командой 'update-rates'"
+                  " и повторите попытку. "
+                  "Если ошибка сохраняется, проверьте подключение к сети.")
 
         except (ValueError, OSError) as error:
             print(f"Ошибка: {error}")
