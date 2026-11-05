@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from functools import wraps
 
 from valutatrade_hub.logging_config import get_action_logger
@@ -14,7 +14,7 @@ def log_action(action, verbose=False):
             user = self.current_user
 
             entry = {
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "level": "INFO",
                 "action": action.upper(),
                 "username": user.username if user is not None else None,

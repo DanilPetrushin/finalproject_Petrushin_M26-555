@@ -1,6 +1,7 @@
-import hashlib # Разрешена по условию задачи
-from valutatrade_hub.core.utils import get_rate
+import hashlib  # Разрешена по условию задачи
+
 from valutatrade_hub.core.exceptions import InsufficientFundsError
+from valutatrade_hub.core.utils import get_rate
 
 
 class User:

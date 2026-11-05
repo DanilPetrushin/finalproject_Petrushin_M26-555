@@ -1,0 +1,5 @@
+{"timestamp": "2026-11-04T20:25:31.237450+00:00", "level": "INFO", "message": "Начало обновления курсов"}
+{"timestamp": "2026-11-04T20:25:31.238450+00:00", "level": "INFO", "message": "CoinGecko: получение курсов"}
+{"timestamp": "2026-11-04T20:25:31.636066+00:00", "level": "INFO", "message": "CoinGecko: получено курсов: 2; сохранение"}
+{"timestamp": "2026-11-04T20:25:31.636571+00:00", "level": "ERROR", "message": "CoinGecko: Expecting value: line 1 column 1 (char 0)"}
+{"timestamp": "2026-11-04T20:25:31.637576+00:00", "level": "ERROR", "message": "Обновление не выполнено: все источники завершились с ошибками"}

@@ -1,6 +1,5 @@
 from valutatrade_hub.infra.settings import PROJECT_ROOT, SettingsLoader
 
-
 settings = SettingsLoader()
 DATA_DIR = PROJECT_ROOT / settings.get("DATA_DIR")
 TIME_LIMIT = settings.get("RATES_TTL_SECONDS")

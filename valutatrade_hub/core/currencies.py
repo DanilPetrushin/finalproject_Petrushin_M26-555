@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+
 from valutatrade_hub.core.exceptions import CurrencyNotFoundError
 from valutatrade_hub.core.utils import normalize_currency
 
@@ -20,7 +21,6 @@ class Currency(ABC):
     @abstractmethod
     def get_display_info(self) -> str:
         """Возвращает описание валюты для интерфейса и логов."""
-        pass
 
 
 class FiatCurrency(Currency):

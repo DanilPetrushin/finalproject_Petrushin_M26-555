@@ -1,8 +1,9 @@
 import json
-from datetime import datetime, timezone
-from valutatrade_hub.core.constants import DATA_DIR, TIME_LIMIT
-from valutatrade_hub.infra.settings import SettingsLoader
+from datetime import UTC, datetime
+
+from valutatrade_hub.core.constants import DATA_DIR
 from valutatrade_hub.core.exceptions import ApiRequestError
+from valutatrade_hub.infra.settings import SettingsLoader
 
 
 def parser_get(source, target):
@@ -36,11 +37,15 @@ def save_json(filename, data):
     # parent создаёт недостающие папки - маловероятно, но пусть
     # exist_ok - не вызывает ошибки, если папка уже есть
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-
     path = DATA_DIR / filename
-    with path.open("w", encoding="utf-8") as f:
-        json.dump(data, f, indent=4, ensure_ascii=False)
-
+    #выполняем требование к атомарной записи
+    temporary_path = path.with_suffix(path.suffix + ".tmp")
+    try:
+        with temporary_path.open("w", encoding="utf-8") as f:
+            json.dump(data, f, indent=4, ensure_ascii=False)
+        temporary_path.replace(path)
+    finally:
+        temporary_path.unlink(missing_ok=True)
 def get_rate(from_currency, to_currency):
     # Да, необычный формат импорта, но иначе происходит ошибка
     from valutatrade_hub.core.currencies import get_currency
@@ -51,7 +56,7 @@ def get_rate(from_currency, to_currency):
     # Создаём ключ по примеру
     key = f"{source}_{target}"
     # Для времени
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
         # Подгружает и ищем по ключу
     settings = SettingsLoader()
     filename = settings.get("RATES_FILE")
@@ -60,8 +65,9 @@ def get_rate(from_currency, to_currency):
             "rate": 1.0,
             "updated_at": now.isoformat(),
         }
-    rates = load_json(settings.get("RATES_FILE"), {})
-    record = rates.get(key)
+    rates = load_json(filename, {})
+    pairs = rates.get("pairs", {})
+    record = pairs.get(key)
 
     # Сначала пробуем использовать сохранённый курс.
     # Есть ли запись?
@@ -73,11 +79,11 @@ def get_rate(from_currency, to_currency):
             updated = datetime.fromisoformat(record["updated_at"])
 
             if updated.tzinfo is None:
-                updated = updated.replace(tzinfo=timezone.utc)
+                updated = updated.replace(tzinfo=UTC)
             # Вычисляем сколько времени прошло
             time_passed = (now - updated).total_seconds()
 
-            if 0 <= time_passed < TIME_LIMIT:
+            if 0 <= time_passed < settings.get("RATES_TTL_SECONDS"):
                 return {
                     "rate": rate,
                     "updated_at": record["updated_at"],
@@ -93,11 +99,15 @@ def get_rate(from_currency, to_currency):
 
     record = {
         "rate": rate,
-        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(UTC).isoformat(),
     }
 
-    rates[key] = record
-    save_json(filename, rates)
+    pairs[key] = record
+
+    save_json(filename, {
+        "pairs": pairs,
+        "last_refresh": record["updated_at"],
+    })
 
     return record.copy()
     

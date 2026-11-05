@@ -1,8 +1,10 @@
 #https://metanit.com/python/tutorial/6.9.php - про secrets
 # Не указан, как раз разрешённый, однако является
 # встроенным и используется для подобных задач
-import secrets  
-from datetime import datetime, timezone
+import secrets
+from datetime import UTC, datetime
+
+from valutatrade_hub.core.currencies import CryptoCurrency, get_currency
 from valutatrade_hub.core.exceptions import InsufficientFundsError
 from valutatrade_hub.core.models import Portfolio, User, Wallet
 from valutatrade_hub.core.utils import (
@@ -12,10 +14,16 @@ from valutatrade_hub.core.utils import (
     save_json,
     validate_amount,
 )
-from valutatrade_hub.infra.settings import SettingsLoader
 from valutatrade_hub.decorators import log_action
-from valutatrade_hub.core.currencies import get_currency
-from valutatrade_hub.core.exceptions import InsufficientFundsError
+from valutatrade_hub.infra.settings import SettingsLoader
+from valutatrade_hub.parser_service.api_clients import (
+    CoinGeckoClient,
+    ExchangeRateApiClient,
+)
+from valutatrade_hub.parser_service.config import ParserConfig
+from valutatrade_hub.parser_service.storage import RatesStorage
+from valutatrade_hub.parser_service.updater import RatesUpdater
+
 
 class TradingService:
     def __init__(self):
@@ -44,7 +52,7 @@ class TradingService:
                     username = username,
                     hashed_password="", 
                     salt = secrets.token_hex(8), 
-                    registration_date = datetime.now(timezone.utc))
+                    registration_date = datetime.now(UTC))
         user.change_password(password)
         # get_user_info возвращает user_id, username и registration_date  
         # остальное добавляем вручную через методы
@@ -120,7 +128,6 @@ class TradingService:
     
         for item in portfolios:
             if item["user_id"] == self.current_user.user_id:
-                # 
                 wallets = {}
                 for code, wallet_data in item["wallets"].items():
                     wallets[code] = Wallet(
@@ -256,3 +263,146 @@ class TradingService:
         result["to_currency"] = target
 
         return result
+    
+    def update_rates(self, source=None):
+        config = ParserConfig()
+
+        # Через словарь связываем название источника и класс
+        client_classes = {
+            "coingecko": CoinGeckoClient,
+            "exchangerate": ExchangeRateApiClient,
+        }
+        # Источник не указан? Выбираем оба класса!
+        if source is None:
+            selected = list(client_classes.values())
+        # Источник указан? Проверяем.
+        else:
+            source = source.strip().lower()
+
+            if source not in client_classes:
+                raise ValueError(
+                    "Допустимые источники: coingecko, exchangerate"
+                )
+
+            selected = [client_classes[source]]
+
+        # Всем передаём одну конфигурацию
+        clients = [client_class(config) for client_class in selected]
+
+        updater = RatesUpdater(
+            clients=clients,
+            storage=RatesStorage(config),
+        )
+
+        return updater.run_update()
+    def show_rates(self, currency=None, top=None, base=None):
+        # Проверяем есть ли N для показа топ-N дорогих криптовалюс
+        if top is not None and (
+            not isinstance(top, int) or top <= 0
+        ):
+            raise ValueError(
+                "'top' должен быть положительным целым числом"
+            )
+        # Относительно какой валюты смотрим?
+        if base is None:
+            base = self._settings.get("DEFAULT_BASE_CURRENCY")
+        # Проверяем, что такая базовая валюта вообще существует
+        base = get_currency(base).code
+        
+        # Какую валюту смотрим?
+        if currency is not None:
+            currency = normalize_currency(currency)
+        # Из кэша достаём словарь пар валют
+        cache = load_json(self._settings.get("RATES_FILE"), {})
+        pairs = cache.get("pairs", {})
+
+        if not pairs:
+            raise ValueError(
+                "Локальный кеш курсов пуст. Выполните "
+                "'update-rates', чтобы загрузить данные."
+            )
+
+        reference = ParserConfig().BASE_CURRENCY
+        # Если запросили одну валюту, проверяем её наличие в кеше
+        if (
+            currency is not None
+            and f"{currency}_{reference}" not in pairs
+        ):
+            raise ValueError(
+                f"Курс для '{currency}' не найден в кеше."
+            )
+
+        # Оставляем только новые записи
+        now = datetime.now(UTC)
+        fresh = {}
+
+        for pair, record in pairs.items():
+            updated = datetime.fromisoformat(record["updated_at"])
+
+            if updated.tzinfo is None:
+                updated = updated.replace(tzinfo=UTC)
+
+            age = (now - updated).total_seconds()
+
+            if 0 <= age < self._settings.get("RATES_TTL_SECONDS"):
+                fresh[pair] = (record, updated)
+
+        # Если база совпадает с базой парсера, пересчёт не нужен
+        base_rate = 1.0
+        base_updated = now
+
+        if base != reference:
+            base_pair = f"{base}_{reference}"
+
+            if base_pair not in fresh:
+                raise ValueError(
+                    f"Нет свежего курса для базы '{base}'. "
+                    "Выполните update-rates."
+                )
+
+            base_record, base_updated = fresh[base_pair]
+            base_rate = validate_amount(base_record["rate"])
+
+        rows = []
+
+        for pair, (record, updated) in fresh.items():
+            code, target = pair.split("_")
+
+            if target != reference:
+                continue
+            # Если указали --currency, остальные валюты пропускаем
+            if currency is not None and code != currency:
+                continue
+
+            # При --top рассматриваем только криптовалюты
+            if top is not None and not isinstance(
+                get_currency(code), CryptoCurrency
+            ):
+                continue
+
+            rows.append({
+                "currency_code": code,
+                "rate": validate_amount(record["rate"]) / base_rate,
+                # Учитываем возраст обоих курсов при пересчёте
+                "updated_at": min(updated, base_updated).isoformat(),
+            })
+
+        if not rows:
+            raise ValueError(
+                "Нет свежих курсов для выбранных условий. "
+                "Выполните update-rates."
+            )
+
+        if top is not None:
+            # Сначала самые дорогие, затем оставляем первые N
+            rows.sort(key=lambda row: row["rate"], reverse=True)
+            rows = rows[:top]
+        else:
+            # Без --top выводим по алфавиту кодов валют
+            rows.sort(key=lambda row: row["currency_code"])
+
+        return {
+            "base": base,
+            "rates": rows,
+            "last_refresh": cache.get("last_refresh"),
+        }

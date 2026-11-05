@@ -1,13 +1,17 @@
-from valutatrade_hub.core.usecases import TradingService
 import shlex
+
+from prettytable import PrettyTable
+
+from valutatrade_hub.core.currencies import CURRENCIES
 from valutatrade_hub.core.exceptions import (
     ApiRequestError,
     CurrencyNotFoundError,
     InsufficientFundsError,
 )
-from valutatrade_hub.core.currencies import CURRENCIES
+from valutatrade_hub.core.usecases import TradingService
 
-# Потом можно в utils убрать
+
+# при желании можно в utils убрать, но здесь читаемость лучше
 def print_help():
     print("\nКоманды:")
     print("register --username <имя> --password <пароль> — регистрация")
@@ -17,6 +21,10 @@ def print_help():
     print("buy --currency <валюта> --amount <количество> — купить валюту")
     print("sell --currency <валюта> --amount <количество> — продать валюту")
     print("get-rate --from <валюта> --to <валюта> — получить курс")
+    print("update-rates — обновить курсы из всех источников")
+    print("update-rates --source <coingecko|exchangerate> — обновить источник")
+    print("show-rates [--currency <код>] [--top <число>] "
+        "[--base <код>] — показать курсы из кеша")
     print("help — показать справку")
     print("exit — завершить работу")
     print('\nЗначения с пробелами заключайте в кавычки: "Иван Иванов".')
@@ -98,7 +106,8 @@ def main():
                     continue
                 
                 #  См. методичка 2 часть ТЗ
-                print(f"Портфель пользователя '{result['username']}' (база: {result['base']}):")
+                print(f"Портфель пользователя '{result['username']}'"
+                      f" (база: {result['base']}):")
 
                 for wallet in result["wallets"]:
                     print(
@@ -182,6 +191,101 @@ def main():
                     f"Обратный курс {target}→{source}: "
                     f"{1 / rate:.8f}"
                 )
+            elif command == "update-rates":
+                if len(args) == 1:
+                    source = None
+
+                elif len(args) == 3 and args[1] == "--source":
+                    source = args[2]
+
+                else:
+                    raise ValueError(
+                        "Использование: update-rates "
+                        "[--source coingecko|exchangerate]"
+                    )
+
+                result = service.update_rates(source)
+
+                if result["errors"]:
+                    print(
+                        "Обновление завершено с ошибками. "
+                        f"Обновлено пар: {result['updated']}."
+                    )
+
+                    for name, message in result["errors"].items():
+                        print(f"- {name}: {message}")
+
+                else:
+                    print(
+                        "Обновление завершено. "
+                        f"Обновлено пар: {result['updated']}."
+                    )
+
+                print(
+                    f"Последнее обновление кеша: "
+                    f"{result['last_refresh']}"
+                )
+            elif command == "show-rates":
+
+                # Здесь удобно: аргументы без самой команды идут парами
+                # Так что проверяем на пары
+                if (len(args) - 1) % 2 != 0:
+                    raise ValueError("Использование: show-rates "
+                    "[--currency <код>] [--top <число>] [--base <код>]")
+                options = {}
+
+                # 1, 3, 5 - это параметры (не значения), проверяем их:
+                # Возможен ли такой параметр?
+                # Не встречался ли он преждде?
+                for i in range(1, len(args), 2):
+                    flag = args[i]
+
+                    if (
+                        flag not in ("--currency", "--top", "--base")
+                        or flag in options
+                    ):
+                        raise ValueError("Использование: show-rates "
+                        "[--currency <код>] [--top <число>] [--base <код>]")
+
+                    options[flag] = args[i + 1]
+                
+                # Смотрим значение параметра top, тк к нему есть ряд требований
+                top = options.get("--top")
+                # Если оно всё же есть:
+                if top is not None:
+                    try:
+                        top = int(top)
+                    except ValueError:
+                        raise ValueError(
+                            "'top' должен быть положительным целым числом"
+                        ) from None
+                if top <= 0:
+                    raise ValueError("'top' должен быть положительным целым числом")
+                
+                result = service.show_rates(
+                    currency=options.get("--currency"),
+                    top=top,
+                    base=options.get("--base"),
+                )
+
+                print(f"Курсы из кеша, база: {result['base']}")
+                print(
+                    f"Последнее обновление кеша: "
+                    f"{result['last_refresh']}"
+                )
+
+                # Делаем таблицу
+                table = PrettyTable()
+                table.field_names = ["Валюта", "Курс", "Обновлено"]
+
+                for row in result["rates"]:
+                    table.add_row([
+                        row["currency_code"],
+                        f"{row['rate']:.8f}",
+                        row["updated_at"],
+                    ])
+
+                print(table)
             else:
                 print(f"Команды '{command}' нет. Введите help.")
 
@@ -195,7 +299,8 @@ def main():
 
         except ApiRequestError as error:
             print(error)
-            print("Повторите попытку позже. Если ошибка сохраняется, проверьте подключение к сети.")
+            print("Повторите попытку позже. Если ошибка сохраняется, "
+                  "проверьте подключение к сети.")
 
         except (ValueError, OSError) as error:
             print(f"Ошибка: {error}")

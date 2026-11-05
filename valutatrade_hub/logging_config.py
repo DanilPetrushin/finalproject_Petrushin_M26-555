@@ -1,6 +1,8 @@
 import logging
 from logging.handlers import RotatingFileHandler
+
 from valutatrade_hub.infra.settings import PROJECT_ROOT, SettingsLoader
+
 # Хотя logging и logging.handlers не упомянуты, как разрешённые библиотеки
 # Они являются базовыми для решения подобных задач, поэтому я их изучил
 # И реализовал решения ведения логов с их помощью   
@@ -8,15 +10,15 @@ from valutatrade_hub.infra.settings import PROJECT_ROOT, SettingsLoader
 # https://docs-python.ru/standart-library/paket-logging-python/obekt-logger-modulja-logging/#logger.propagate
 
 
-def get_action_logger():
-    logger = logging.getLogger("valutatrade.actions")
+def get_action_logger(name="valutatrade.actions", log_file=None):
+    logger = logging.getLogger(name)
 
     # Проверяем  наличие handler, чтобы не создавать его каждый раз
     if logger.handlers:
         return logger
 
     settings = SettingsLoader()
-    log_path = PROJECT_ROOT / settings.get("LOG_FILE")
+    log_path = PROJECT_ROOT / (log_file or settings.get("LOG_FILE"))
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Тут создаём handler

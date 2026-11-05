@@ -2,7 +2,6 @@ import json
 from pathlib import Path
 from typing import Any
 
-
 # тут мы получаем именно путь до папки project на каждом пк
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 # а вот тут уже до project/config
@@ -46,7 +45,7 @@ class SettingsLoader:
             return config
 
         if not isinstance(loaded_config, dict):
-            raise ValueError("config.json должен содержать JSON-объект")
+            raise TypeError("config.json должен содержать JSON-объект")
 
         # Настройки из файла заменяют значения по умолчанию.
         config.update(loaded_config)
